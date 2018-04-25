@@ -1,7 +1,13 @@
+# !/usr/bin/env python3.6
+# -*- coding:utf-8 -*-
+
 """
-Convert annotated human genome sequence to table in PostgreSQL
+Convert annotated human genome sequence to table on PostgreSQL
 
 Data source: https://useast.ensembl.org/info/data/ftp/index.html, EMBL
+
+Author: Pan Deng
+
 """
 
 import gzip
@@ -9,10 +15,12 @@ import os
 import psycopg2
 import re
 import __credential__
-
+from S3BatchUnzipper import S3BatchUnzipper
 
 # path to annotated genome sequence
 INPUT_PATH_LOCAL = os.path.abspath('../homo_sapiens/')
+INPUT_PATH_AWS = ['gdcdata', 'homo_sapiens/']
+DATA_FROM_S3 = True
 
 # regex
 PATTERNS = {'chromosome': '.*\.([a-z]+\.[0-9A-Z]+).dat.gz',  # The chromosome the gene is on.
@@ -23,7 +31,8 @@ PATTERNS = {'chromosome': '.*\.([a-z]+\.[0-9A-Z]+).dat.gz',  # The chromosome th
             'tag': '\/([a-z_]+)',  # To extract gene id, name or note.
             'id_info': '=([A-Z0-9.]+)',  # gene id.
             'name_info': '="(.+)"',  # gene name.
-            'note_info': ' {21}(.+)\''}  # gene note.
+            'note_start': '.* +(\/note.+)\'', # gene note
+            'note_continue': '.* +(.+)\''}  # wrapped note. without /note tag, switch_note should be on
 
 
 class Gene:
@@ -42,19 +51,13 @@ class Gene:
         return 'Gene\n\tid: %s \n\tname: %s \n\tchr: %s \n\tstrand: %s ' \
                '\n\tposition: %i..%i \n\tinfo: %s \n\tother: %s' \
                 % (self.id, self.name, self.chromosome, self.strand,
-                  self.position[0], self.position[1], self.info, self.other)
+                   self.position[0], self.position[1], self.info, self.other)
 
 
 def create_table():
     """
-    Connect to PostgreSQL server via credentials and refresh table
-    
-    :return: connector and cursor of the database
+    Refresh table
     """
-    conn = psycopg2.connect(host=__credential__.host, dbname=__credential__.dbname,
-                            user=__credential__.user, password=__credential__.password)
-    cur = conn.cursor()
-
     cur.execute("""
         DROP TABLE IF EXISTS hs_genome""")
     conn.commit()
@@ -72,7 +75,14 @@ def create_table():
     """)
     conn.commit()
 
-    return conn, cur
+
+def count_table_rows():
+    """
+    :return: Count of rows in the table 
+    """
+    cur.execute("SELECT COUNT(*) FROM hs_genome")
+    conn.commit()
+    return cur.fetchone()[0]
 
 
 def info_extractor(pattern, line, group_num=1, test=False):
@@ -105,32 +115,56 @@ def info_extractor(pattern, line, group_num=1, test=False):
     return extract
 
 
-def main(path):
-    input_path = path
-
+def main(param):
     # Create PostgreSQL table
-    conn, cur = create_table()
+    create_table()
 
-    files = [_ for _ in os.listdir(input_path) if _.endswith('dat.gz')]
-    # files = ['Homo_sapiens.GRCh38.92.chromosome.14.dat.gz']  # for small scale test
+    # Aquire (.gz) file list from path
+    if DATA_FROM_S3:
+        try:
+            assert len(param) == 2
+            bucket, prefix = param
+            unzipper = S3BatchUnzipper(bucket=bucket, targetdir=prefix)
+            files = unzipper.get_gzip_file_list()
+        except AssertionError:
+            print("Bucket and Prefix information required for reading data from Amazon S3")
+    else:
+        try:
+            assert os.path.exists(param)
+            input_path = param
+            files = [_ for _ in os.listdir(input_path) if _.endswith('dat.gz')]
+            # files = ['Homo_sapiens.GRCh38.92.chromosome.14.dat.gz']  # for small scale test
+        except AssertionError:
+            print("Valid path to input files required")
 
+    # Process all reference files
     for file in files:
-        print("Reading genome file: %s" %file)
-        f = gzip.open(os.path.join(input_path, file), 'r')
-        chr_num = info_extractor(PATTERNS['chromosome'], file)
+        # Open file
+        if DATA_FROM_S3:
+            print("Reading genome file: %s" % file.name)
+            f = S3BatchUnzipper.unzip_file(file.metadata)
+            chr_num = info_extractor(PATTERNS['chromosome'], file.name)
+        else:
+            print("Reading genome file: %s" % file)
+            f = gzip.open(os.path.join(input_path, file), 'r')
+            chr_num = info_extractor(PATTERNS['chromosome'], file)
 
         cnt = 0  # for small scale test
 
         switch_reading = False  # Whether current line is in gene block
         switch_note = False  # Whether current line is describing notes of a gene
         gene = Gene()  # A new Gene
+
         for line in f:
             if switch_reading:
                 # Current gene block ends
                 if info_extractor(PATTERNS['next_block'], str(line)):
                     if switch_note:
                         # Clean up note information by removing '\note' tag and '"' in notes
-                        gene.info = gene.info.split("\"")[1]
+                        try:
+                            gene.info = gene.info.split("\"")[1]
+                        except IndexError:
+                            pass
                         switch_note = False
                     switch_reading = False
 
@@ -157,9 +191,11 @@ def main(path):
                     elif tag == 'locus_tag':
                         gene.name = info_extractor(PATTERNS['name_info'], str(line))
                         switch_note = False
-                    elif tag == 'note' or switch_note:
+                    elif switch_note:
+                        gene.info += info_extractor(PATTERNS['note_continue'], str(line)).replace('\\n', ' ')
+                    elif tag == 'note':
                         switch_note = True
-                        gene.info += info_extractor(PATTERNS['note_info'], str(line)).replace('\\n', ' ')
+                        gene.info += info_extractor(PATTERNS['note_start'], str(line)).replace('\\n', ' ')
 
             # If the new block is a gene, start a new Gene class
             gene_block = info_extractor(PATTERNS['gene_block'], str(line))
@@ -167,10 +203,12 @@ def main(path):
                 switch_reading = True
                 gene = Gene()
 
-                if 'MT' not in chr_num:  # Mitochondrial DNA doesn't have strand information
+                # Mitochondrial DNA doesn't have strand information
+                if 'MT' not in chr_num:
                     gene.strand = '-' if info_extractor(PATTERNS['gene_strand'], gene_block) else '+'
 
-                if chr_num:  # Non-chromosomal genes have disjoint gene positions, so ignored here.
+                # Non-chromosomal genes have disjoint gene positions, so ignored here.
+                if chr_num:
                     gene.chromosome = chr_num
                     gene.position = info_extractor(PATTERNS['gene_position'], gene_block, 2)
 
@@ -180,11 +218,28 @@ def main(path):
 
             # For test purpose
             # cnt += 1
-            # if cnt == 2000:
-            #     break
+            # if cnt == 100:
+            #    break
+        # break
+        print('Genes mapped: %i' % count_table_rows())
 
+    # Total genes added to the database
+    print("...............")
+    print('Total genes mapped: %i' % count_table_rows())
 
 if __name__ == "__main__":
-    input_path = INPUT_PATH_LOCAL
+    # TODO: arg parser for DATA_FROM_S3 flag, table name, and etc.
+    if DATA_FROM_S3:
+        print("- Data source: Amazon AWS")
+        input_param = INPUT_PATH_AWS
+    else:
+        print("- Data source: local machine")
+        input_param = INPUT_PATH_LOCAL
 
-    main(input_path)
+    # Connect to PostSQL with the credentials
+    # Setup the connector and cursor of the database
+    conn = psycopg2.connect(host=__credential__.host, dbname=__credential__.dbname,
+                            user=__credential__.user, password=__credential__.password)
+    cur = conn.cursor()
+
+    main(input_param)
