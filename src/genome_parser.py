@@ -4,32 +4,33 @@ Convert annotated human genome sequence to table in PostgreSQL
 Data source: https://useast.ensembl.org/info/data/ftp/index.html, EMBL
 """
 
-import os
 import gzip
-import re
+import os
 import psycopg2
+import re
 import __credential__
 
 
 # path to annotated genome sequence
-INPUT_PATH = os.path.abspath('../homo_sapiens/')
-
-# OUTPUT_PATH = os.path.abspath('../reference_genome')
+INPUT_PATH_LOCAL = os.path.abspath('../homo_sapiens/')
 
 # regex
-PATTERNS = {'gene_block': '  gene *(.*)',  # locate genomic sequence with strand and position information
-            'gene_position': '([0-9]*)\.\.([0-9]*)',  # start and end pos of a gene
-            'next_block': '  ([a-zA-Z_].*) ',  # Go to next block
-            'tag': '\/([a-z_]*)',  # To extract gene id, name or note
-            'id_info': '=([A-Z0-9.]*)',  # gene id
-            'name_info': '="(.*)"',  # gene name
-            'note_info': ' {21}(.*)\''}  # gene note
+PATTERNS = {'chromosome': '.*\.([a-z]+\.[0-9A-Z]+).dat.gz',  # The chromosome the gene is on.
+            'gene_block': '  gene +(.*)',  # locate genomic sequence with strand and position information.
+            'gene_strand': '.*(complement).*',  # The DNA strand the gene is on.
+            'gene_position': '([0-9]+)\.\.([0-9]+)',  # start and end pos of a gene.
+            'next_block': '  ([a-zA-Z_]+) ',  # Go to next block.
+            'tag': '\/([a-z_]+)',  # To extract gene id, name or note.
+            'id_info': '=([A-Z0-9.]+)',  # gene id.
+            'name_info': '="(.+)"',  # gene name.
+            'note_info': ' {21}(.+)\''}  # gene note.
 
 
 class Gene:
     """
     Temporarily saves information of one gene
     """
+    chromosome = 'Non-chromosomal'
     strand = None
     position = [-1, -1]
     id = None
@@ -38,8 +39,10 @@ class Gene:
     other = ""
 
     def __repr__(self):
-        return 'Gene\n\tid: %s \n\tname: %s \n\tstrand: %s \n\tposition: %i..%i \n\tinfo: %s \n\tother: %s' \
-                %(self.id, self.name, self.strand, self.position[0], self.position[1], self.info, self.other)
+        return 'Gene\n\tid: %s \n\tname: %s \n\tchr: %s \n\tstrand: %s ' \
+               '\n\tposition: %i..%i \n\tinfo: %s \n\tother: %s' \
+                % (self.id, self.name, self.chromosome, self.strand,
+                  self.position[0], self.position[1], self.info, self.other)
 
 
 def create_table():
@@ -60,6 +63,7 @@ def create_table():
     CREATE TABLE hs_genome(
         id text PRIMARY KEY,
         name text,
+        chromosome text,
         strand text,
         pos_start integer,
         pos_end integer,
@@ -90,6 +94,7 @@ def info_extractor(pattern, line, group_num=1, test=False):
         print('Pattern: ', pattern)
 
     try:
+        # Extract the capturing group
         if group_num == 1:
             extract = match.group(1)
         else:
@@ -100,15 +105,19 @@ def info_extractor(pattern, line, group_num=1, test=False):
     return extract
 
 
-def main():
+def main(path):
+    input_path = path
+
     # Create PostgreSQL table
     conn, cur = create_table()
 
     files = [_ for _ in os.listdir(input_path) if _.endswith('dat.gz')]
-    # files = ['Homo_sapiens.GRCh38.92.chromosome.12.dat.gz']  # for small scale test
+    # files = ['Homo_sapiens.GRCh38.92.chromosome.14.dat.gz']  # for small scale test
 
     for file in files:
+        print("Reading genome file: %s" %file)
         f = gzip.open(os.path.join(input_path, file), 'r')
+        chr_num = info_extractor(PATTERNS['chromosome'], file)
 
         cnt = 0  # for small scale test
 
@@ -126,12 +135,18 @@ def main():
                     switch_reading = False
 
                     # Add the gene to database
+                    # TODO: Bug on master node. Generate 2217 entries at local with chr.14 file but 2216 on masternode
+                    # TODO: One of the 'gene'(ENSG00000276225.1)(possibly) gives error
                     try:
-                        cur.execute("INSERT INTO hs_genome VALUES (%s, %s, %s, %s, %s, %s)",
-                                    (gene.id, gene.name, gene.strand, gene.position[0], gene.position[1], gene.info))
+                        # print(gene)
+                        cur.execute("INSERT INTO hs_genome VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                                    (gene.id, gene.name, gene.chromosome, gene.strand,
+                                       gene.position[0], gene.position[1], gene.info))
                         conn.commit()
-                    except psycopg2.IntegrityError:
-                        pass
+                    except IndexError:
+                        print('ERROR processing gene: %s' % gene.id)
+                        # print(gene.id, gene.name, gene.chromosome, gene.position, gene.info)
+
                 # Continue parsing current gene information
                 else:
                     tag = info_extractor(PATTERNS['tag'], str(line))
@@ -151,9 +166,17 @@ def main():
             if gene_block:
                 switch_reading = True
                 gene = Gene()
-                gene.strand = '-' if gene_block[0] == 'c' else '+'
-                gene.position = info_extractor(PATTERNS['gene_position'], gene_block, 2)
-                gene.position = list(map(int, gene.position))
+
+                if 'MT' not in chr_num:  # Mitochondrial DNA doesn't have strand information
+                    gene.strand = '-' if info_extractor(PATTERNS['gene_strand'], gene_block) else '+'
+
+                if chr_num:  # Non-chromosomal genes have disjoint gene positions, so ignored here.
+                    gene.chromosome = chr_num
+                    gene.position = info_extractor(PATTERNS['gene_position'], gene_block, 2)
+
+                    # To avoid IndexError
+                    if len(gene.position) == 2:
+                        gene.position = list(map(int, gene.position))
 
             # For test purpose
             # cnt += 1
@@ -162,5 +185,6 @@ def main():
 
 
 if __name__ == "__main__":
-    input_path = INPUT_PATH
-    main()
+    input_path = INPUT_PATH_LOCAL
+
+    main(input_path)
