@@ -1,3 +1,6 @@
 .idea/*
 
 homo_sapiens/
+
+src/__credential__.py
+src/__pycache__/*
