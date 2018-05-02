@@ -4,3 +4,8 @@ homo_sapiens/
 
 src/__credential__.py
 src/__pycache__/*
+
+src/module/__pycache*
+src/module/.ipynb_*
+
+bc/*
