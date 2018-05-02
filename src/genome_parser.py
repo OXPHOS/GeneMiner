@@ -13,14 +13,14 @@ Author: Pan Deng
 import gzip
 import os
 import psycopg2
-import re
 import __credential__
 from S3BatchUnzipper import S3BatchUnzipper
+from info_extractor import info_extractor
 
 # path to annotated genome sequence
 INPUT_PATH_LOCAL = os.path.abspath('../homo_sapiens/')
 INPUT_PATH_AWS = ['gdcdata', 'homo_sapiens/']
-DATA_FROM_S3 = True
+DATA_FROM_S3 = False
 
 # regex
 PATTERNS = {'chromosome': '.*\.([a-z]+\.[0-9A-Z]+).dat.gz',  # The chromosome the gene is on.
@@ -63,7 +63,7 @@ def create_table():
     conn.commit()
 
     cur.execute("""
-    CREATE TABLE hs_genome(
+    CREATE TABLE %s(
         id text PRIMARY KEY,
         name text,
         chromosome text,
@@ -72,7 +72,7 @@ def create_table():
         pos_end integer,
         info text
     )
-    """)
+    """ % __credential__.dbtable)
     conn.commit()
 
 
@@ -83,37 +83,6 @@ def count_table_rows():
     cur.execute("SELECT COUNT(*) FROM hs_genome")
     conn.commit()
     return cur.fetchone()[0]
-
-
-def info_extractor(pattern, line, group_num=1, test=False):
-    """
-    Extract text in line that matches pattern and return the expected extracted text
-    
-    :param pattern: the regex pattern to be match
-    :param line: the input text
-    :param group_num: how many capturing groups are expected
-    :param test: whether the function is called for test
-    :return: extracted text
-    """
-
-    regxObj = re.compile(pattern, re.IGNORECASE | re.UNICODE)
-    match = regxObj.search(line)
-
-    if test:
-        print('Line: ', line)
-        print('Pattern: ', pattern)
-
-    try:
-        # Extract the capturing group
-        if group_num == 1:
-            extract = match.group(1)
-        else:
-            extract = [match.group(_) for _ in range(1, group_num+1)]
-    # if no matching pattern is found
-    except AttributeError:
-        extract = ""
-    return extract
-
 
 def main(param):
     # Create PostgreSQL table
@@ -227,10 +196,11 @@ def main(param):
     print("...............")
     print('Total genes mapped: %i' % count_table_rows())
 
+
 if __name__ == "__main__":
     # TODO: arg parser for DATA_FROM_S3 flag, table name, and etc.
     if DATA_FROM_S3:
-        print("- Data source: Amazon AWS")
+        print("- Data source: Amazon S3")
         input_param = INPUT_PATH_AWS
     else:
         print("- Data source: local machine")
