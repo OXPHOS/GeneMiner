@@ -59,7 +59,7 @@ def create_table():
     Refresh table
     """
     cur.execute("""
-        DROP TABLE IF EXISTS hs_genome""")
+        DROP TABLE IF EXISTS %s""" % __credential__.dbtable_psql)
     conn.commit()
 
     cur.execute("""
@@ -72,7 +72,7 @@ def create_table():
         pos_end integer,
         info text
     )
-    """ % __credential__.dbtable)
+    """ % __credential__.dbtable_psql)
     conn.commit()
 
 
@@ -208,8 +208,8 @@ if __name__ == "__main__":
 
     # Connect to PostSQL with the credentials
     # Setup the connector and cursor of the database
-    conn = psycopg2.connect(host=__credential__.host, dbname=__credential__.dbname,
-                            user=__credential__.user, password=__credential__.password)
+    conn = psycopg2.connect(host=__credential__.host_psql, dbname=__credential__.dbname_psql,
+                            user=__credential__.user_psql, password=__credential__.password_psql)
     cur = conn.cursor()
 
     main(input_param)
