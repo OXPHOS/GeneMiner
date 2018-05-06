@@ -1,9 +1,33 @@
+# !/usr/bin/env python3.6
+# -*- coding:utf-8 -*-
+
+"""
+Integrate metadata JSON file and manifest file, and export to PostgreSQL
+
+Data source: https://portal.gdc.cancer.gov/, NCI
+
+Author: Pan Deng
+
+"""
+
 from pyspark.sql import SparkSession
 import __credential__
 from os import environ
 
+TableByFormat = {'BCR XML': 'xml_list', 'TXT': 'txt_list'}
+
 
 def psql_saver(df, tbname, savemode='error'):
+    """
+    Save DataFrame to PostgreSQL via JDBC postgresql driver
+    
+    :param df: dataframe to be saved
+    :param tbname: table name
+    :param savemode: error: report error if exists
+                     overwrite: overwrite the table if exists
+                     append: append the the table if exists
+                     ignore: no updates if the table exists
+    """
     df.createOrReplaceTempView("view")
     spark.sql('''SELECT * FROM view''').write \
         .format('jdbc') \
@@ -39,7 +63,6 @@ def main():
     index.createOrReplaceTempView("index_view")
 
     # Split files and save to PostgreSQL
-    TableByFormat = {'BCR XML': 'xml_list', 'TXT': 'txt_list'}
 
     # Group files by column: data_format
     files_groupby_types = list(map(
@@ -55,6 +78,9 @@ def main():
     if unreadable.count():
         print("Saving data in unkown foramt to PostgreSQL table: unknowns.")
         psql_saver(unreadable.toDF(), 'unknowns', 'overwrite')
+
+
+    # TODO: Connect and create table for with users as key on Redshift
 
 
 if __name__ == "__main__":
