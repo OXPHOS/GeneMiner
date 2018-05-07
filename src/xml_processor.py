@@ -26,12 +26,12 @@ def update_patient_info(vals, key):
     :param key: The key of the row to be updated
     """
     cur.execute("""
-    UPDATE patient_info
-    SET disease_stage='%s',
-    disease_type='%s',
-    gender='%s'
-    WHERE case_id='%s';
-    """ % (vals['stage'], vals['primary_site'], vals['gender'], key))
+        UPDATE patient_info
+        SET disease_stage='%s',
+        disease_type='%s',
+        gender='%s'
+        WHERE case_id='%s';
+        """ % (vals['stage'], vals['primary_site'], vals['gender'], key))
     conn.commit()
 
 
