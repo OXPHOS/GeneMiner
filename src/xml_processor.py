@@ -10,29 +10,14 @@ Author: Pan Deng
 """
 
 from os import environ
-from pyspark.sql import SparkSession
+from pyspark.sql import SparkSession, Row
 import psycopg2
+import time
 import __credential__
 import database_connector
 
 psql=True
-
-
-def update_patient_info(vals, key):
-    """
-    Update column values based on case_id in the same row
-    
-    :param vals: the values to be updated
-    :param key: The key of the row to be updated
-    """
-    cur.execute("""
-        UPDATE patient_info
-        SET disease_stage='%s',
-        disease_type='%s',
-        gender='%s'
-        WHERE case_id='%s';
-        """ % (vals['stage'], vals['primary_site'], vals['gender'], key))
-    conn.commit()
+test=True
 
 
 def process_xml():
@@ -48,7 +33,10 @@ def process_xml():
 
     # Progress bar
     cnt = 0
-    print("Progress: every 100 processing")
+
+    if test:
+        start_time = time.time()
+        filelist = filelist[:100]
 
     for f in filelist:
         # Load clinical.xml file from Amazon S3
@@ -57,19 +45,52 @@ def process_xml():
             .load("s3a://gdcdata/datasets/%s" % f.filepath)
 
         try:
+            # Extract useful information and update the database
+            def update_patient_info(rows):
+                """
+                Update column values based on case id in the same row
+
+                :param rows: the partition of RDD to be updated in the database
+                """
+                if psql:
+                    # Connect to PostgreSQL
+                    conn = psycopg2.connect(host=__credential__.host_psql, dbname=__credential__.dbname_psql,
+                                            user=__credential__.user_psql, password=__credential__.password_psql)
+                else:
+                    # Connect to Redshift
+                    conn = psycopg2.connect(host=__credential__.host_redshift, dbname=__credential__.dbname_redshift,
+                                            user=__credential__.user_redshift,
+                                            password=__credential__.password_redshift,
+                                            port=__credential__.port_redshift)
+                cur = conn.cursor()
+
+                # Write rows to table in database
+                for row in rows:
+                    cur.execute("""
+                        UPDATE patient_info
+                        SET disease_stage='%s',
+                        disease_type='%s',
+                        gender='%s'
+                        WHERE case_id='%s';
+                    """ % (row['stage'], row['primary_site'], row['gender'], f.caseid))
+                conn.commit()
+
             # TODO: Figure out why some xml cannot be processed
-            # Extract useful information
-            info = {'stage': xml_schema.first()['shared_stage:stage_event']['shared_stage:pathologic_stage']._VALUE, \
-                    'primary_site': xml_schema.first()['clin_shared:tumor_tissue_site']._VALUE, \
-                    'gender': xml_schema.first()['shared:gender']._VALUE}
-            update_patient_info(info, key=f.caseid)
+            xml_schema_rdd = xml_schema.rdd.map(lambda x: Row( \
+                stage=x['shared_stage:stage_event']['shared_stage:pathologic_stage']._VALUE, \
+                primary_site=x['clin_shared:tumor_tissue_site']._VALUE, \
+                gender=x['shared:gender']._VALUE))
+
+            xml_schema_rdd.foreachPartition(update_patient_info)
 
         except:
             print("\nExtractionError! %s \n" % f.filepath)
 
         cnt += 1
-        if not cnt % 100:
-            print('.', end=' ')
+
+    if test:
+        print("TOTAL RUNNING TIME on 100 FILES: ", (time.time() - start_time))
+    
 
 
 if __name__ == "__main__":
@@ -78,12 +99,6 @@ if __name__ == "__main__":
         print("Using PostgreSQL as database.")
         environ['PYSPARK_SUBMIT_ARGS'] = '--packages com.databricks:spark-xml_2.10:0.4.1 \
                             --jars ./jars/postgresql-42.2.2.jar pyspark-shell'
-
-        # Connect to PostgreSQL
-        conn = psycopg2.connect(host=__credential__.host_psql, dbname=__credential__.dbname_psql,
-                                user=__credential__.user_psql, password=__credential__.password_psql)
-        cur = conn.cursor()
-
     else:
         print("Using Redshift as database.")
         environ['PYSPARK_SUBMIT_ARGS'] = '--packages com.databricks:spark-xml_2.10:0.4.1 \
@@ -92,13 +107,8 @@ if __name__ == "__main__":
                             --jars ./jars/RedshiftJDBC41-1.2.12.1017.jar \
                             --jars ./jars/minimal-json-0.9.5.jar pyspark-shell'
 
-        # Connect to Redshift
-        conn = psycopg2.connect(host=__credential__.host_redshift, dbname=__credential__.dbname_redshift,
-                                user=__credential__.user_redshift, password=__credential__.password_redshift,
-                                port=__credential__.port_redshift)
-        cur = conn.cursor()
-
     # Setup python path for worker nodes
+    environ['PYTHONPATH'] = '$PYTHONPATH:/home/ubuntu/GeneMiner/src'
     environ['PYSPARK_PYTHON'] = '/home/ubuntu/anaconda3/bin/python'
     environ['PYSPARK_DRIVER_PYTHON'] = '/home/ubuntu/anaconda3/bin/jupyter'
 
@@ -109,9 +119,10 @@ if __name__ == "__main__":
         .appName("xml_reader") \
         .getOrCreate()
 
+    spark.sparkContext.addPyFile('/home/ubuntu/GeneMiner/src/__credential__.py')
     process_xml()
 
-    cur.close()
-    conn.close()
+    #cur.close()
+    #conn.close()
 
     spark.stop()
