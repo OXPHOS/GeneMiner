@@ -10,7 +10,9 @@ Author: Pan Deng
 """
 
 from os import environ
-from pyspark.sql import SparkSession, Row
+from pyspark.sql import SparkSession
+import boto3
+import xml.etree.ElementTree as ET
 import psycopg2
 import time
 import __credential__
@@ -18,6 +20,77 @@ import database_connector
 
 psql=True
 test=True
+
+# To extract xml field text from xml tree structure
+xml_ref = {'stage': './/*/{http://tcga.nci/bcr/xml/clinical/shared/stage/2.7}pathologic_stage', \
+           'primary_site': './/{http://tcga.nci/bcr/xml/clinical/shared/2.7}tumor_tissue_site', \
+           'gender': './/{http://tcga.nci/bcr/xml/shared/2.7}gender'}
+
+
+def extract_field(files):
+    """
+    Access XML files on Amazon S3 with Boto3 and xml.etree with paths given in RDD
+    And return extracted field
+    
+    :param files: RDD of filenames and path to files
+    :return: yield extracted information from each file
+    """
+    resource = boto3.resource('s3', aws_access_key_id=__credential__.aws_access_key_id, \
+                              aws_secret_access_key=__credential__.aws_secret_access_key)
+    for f in files:
+        # Stream-in files from S3
+        obj = resource.Object('gdcdata', 'datasets/%s' % f.filepath)
+        body = obj.get()['Body'].read()
+
+        # Extract information: stage, primary site and gender associated with patient id,
+        info = dict(map(lambda x: (x[0], ET.fromstring(body).find(x[1]).text), xml_ref.items()))
+        info.update({"caseid": f.caseid})
+
+        yield info
+
+
+def update_patient_info(rows):
+    """
+    Update column values based on case id in the same row
+
+    :param rows: the partition of RDD to be updated in the database
+    """
+    from psycopg2 import extras
+    if psql:
+        # Connect to PostgreSQL
+        conn = psycopg2.connect(host=__credential__.host_psql, dbname=__credential__.dbname_psql,
+                                user=__credential__.user_psql, password=__credential__.password_psql)
+    else:
+        # Connect to Redshift
+        conn = psycopg2.connect(host=__credential__.host_redshift, dbname=__credential__.dbname_redshift,
+                                user=__credential__.user_redshift,
+                                password=__credential__.password_redshift,
+                                port=__credential__.port_redshift)
+    cur = conn.cursor()
+
+    # Write rows to table in database
+    query = """
+            UPDATE patient_info
+            SET disease_stage=%(stage)s,
+            disease_type=%(primary_site)s,
+            gender=%(gender)s
+            WHERE case_id=%(caseid)s;
+        """
+    psycopg2.extras.execute_batch(cur, query, rows)
+    conn.commit()
+    '''
+    for row in rows:
+        cur.execute("""
+            UPDATE patient_info
+            SET disease_stage='%s',
+            disease_type='%s',
+            gender='%s'
+            WHERE case_id='%s';
+        """ % (row['stage'], row['primary_site'], row['gender'], row['caseid']))
+    conn.commit()
+    '''
+    cur.close()
+    conn.close()
 
 
 def process_xml():
@@ -27,70 +100,22 @@ def process_xml():
     """
     # Acquire xml file list
     if psql:
-        filelist = database_connector.psql_file_loader(spark, tbname="xml_list")
+        filelist_rdd = database_connector.psql_file_loader(spark, tbname="xml_list")
     else:
-        filelist = database_connector.redshift_file_loader(spark, tbname="xml_list", tmpdir="xml_files")
-
-    # Progress bar
-    cnt = 0
+        filelist_rdd = database_connector.redshift_file_loader(spark, tbname="xml_list", tmpdir="xml_files")
 
     if test:
         start_time = time.time()
-        filelist = filelist[:100]
+        # filelist = filelist.take(100)
 
-    for f in filelist:
-        # Load clinical.xml file from Amazon S3
-        xml_schema = spark.read.format('com.databricks.spark.xml') \
-            .options(rowTag='brca:patient') \
-            .load("s3a://gdcdata/datasets/%s" % f.filepath)
+    # Extract required fields from xml files
+    xml_schema_rdd = filelist_rdd.mapPartitions(extract_field)
 
-        try:
-            # Extract useful information and update the database
-            def update_patient_info(rows):
-                """
-                Update column values based on case id in the same row
-
-                :param rows: the partition of RDD to be updated in the database
-                """
-                if psql:
-                    # Connect to PostgreSQL
-                    conn = psycopg2.connect(host=__credential__.host_psql, dbname=__credential__.dbname_psql,
-                                            user=__credential__.user_psql, password=__credential__.password_psql)
-                else:
-                    # Connect to Redshift
-                    conn = psycopg2.connect(host=__credential__.host_redshift, dbname=__credential__.dbname_redshift,
-                                            user=__credential__.user_redshift,
-                                            password=__credential__.password_redshift,
-                                            port=__credential__.port_redshift)
-                cur = conn.cursor()
-
-                # Write rows to table in database
-                for row in rows:
-                    cur.execute("""
-                        UPDATE patient_info
-                        SET disease_stage='%s',
-                        disease_type='%s',
-                        gender='%s'
-                        WHERE case_id='%s';
-                    """ % (row['stage'], row['primary_site'], row['gender'], f.caseid))
-                conn.commit()
-
-            # TODO: Figure out why some xml cannot be processed
-            xml_schema_rdd = xml_schema.rdd.map(lambda x: Row( \
-                stage=x['shared_stage:stage_event']['shared_stage:pathologic_stage']._VALUE, \
-                primary_site=x['clin_shared:tumor_tissue_site']._VALUE, \
-                gender=x['shared:gender']._VALUE))
-
-            xml_schema_rdd.foreachPartition(update_patient_info)
-
-        except:
-            print("\nExtractionError! %s \n" % f.filepath)
-
-        cnt += 1
+    # Update the database
+    xml_schema_rdd.foreachPartition(update_patient_info)
 
     if test:
-        print("TOTAL RUNNING TIME on 100 FILES: ", (time.time() - start_time))
-    
+        print("TOTAL RUNNING TIME: ", (time.time() - start_time))
 
 
 if __name__ == "__main__":
@@ -119,10 +144,9 @@ if __name__ == "__main__":
         .appName("xml_reader") \
         .getOrCreate()
 
+    # IMPORTANT: to import module in the same python package
     spark.sparkContext.addPyFile('/home/ubuntu/GeneMiner/src/__credential__.py')
-    process_xml()
 
-    #cur.close()
-    #conn.close()
+    process_xml()
 
     spark.stop()

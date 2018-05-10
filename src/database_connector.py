@@ -62,11 +62,11 @@ def psql_file_loader(spark, tbname):
 
     :param spark: SparkSession
     :param tbname: The table saving file information 
-    :return: List of files
+    :return: Filelist rdd
     """
     filelist_rdd = psql_loader(spark, tbname) \
         .rdd.map(lambda x: Row(caseid=x.case_id, filepath=x.path + '/' + x.filename))
-    return list(filelist_rdd.collect())
+    return filelist_rdd
 
 
 def redshift_saver(spark, df, tbname, tmpdir, savemode='error'):
@@ -120,11 +120,11 @@ def redshift_file_loader(spark, tbname, tmpdir):
     :param spark: SparkSession
     :param tbname: The table saving file information 
     :param tmpdir: tmp S3 dir to store data
-    :return: List of files
+    :return: Filelist rdd
     """
     filelist_rdd = redshift_loader(spark, tbname, tmpdir) \
         .rdd.map(lambda x: Row(caseid=x.case_id, filepath=x.path + '/' + x.filename))
-    return list(filelist_rdd.collect())
+    return filelist_rdd
 
 
 if __name__ == "__main__":
