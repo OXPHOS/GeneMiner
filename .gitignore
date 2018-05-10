@@ -9,3 +9,4 @@ src/module/__pycache*
 src/module/.ipynb_*
 
 bc/*
+playground/*
