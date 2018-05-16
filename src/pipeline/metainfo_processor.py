@@ -44,7 +44,6 @@ def create_table():
         disease_type text,
         disease_stage text,
         gender text,
-        gene_expr_table text,
         UNIQUE (case_id)
     )
     """)

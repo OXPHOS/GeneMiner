@@ -15,11 +15,12 @@ import boto3
 import xml.etree.ElementTree as ET
 import psycopg2
 import time
+from LocalConnector import LocalConnector
 import __credential__
 import database_connector
 
 psql=True
-test=True
+test=False
 
 # To extract xml field text from xml tree structure
 xml_ref = {'stage': './/*/{http://tcga.nci/bcr/xml/clinical/shared/stage/2.7}pathologic_stage', \
@@ -56,17 +57,8 @@ def update_patient_info(rows):
     :param rows: the partition of RDD to be updated in the database
     """
     from psycopg2 import extras
-    if psql:
-        # Connect to PostgreSQL
-        conn = psycopg2.connect(host=__credential__.host_psql, dbname=__credential__.dbname_psql,
-                                user=__credential__.user_psql, password=__credential__.password_psql)
-    else:
-        # Connect to Redshift
-        conn = psycopg2.connect(host=__credential__.host_redshift, dbname=__credential__.dbname_redshift,
-                                user=__credential__.user_redshift,
-                                password=__credential__.password_redshift,
-                                port=__credential__.port_redshift)
-    cur = conn.cursor()
+    local_connector = LocalConnector(psql)
+    conn, cur = local_connector.get_connection()
 
     # Write rows to table in database
     query = """
@@ -78,19 +70,8 @@ def update_patient_info(rows):
         """
     psycopg2.extras.execute_batch(cur, query, rows)
     conn.commit()
-    '''
-    for row in rows:
-        cur.execute("""
-            UPDATE patient_info
-            SET disease_stage='%s',
-            disease_type='%s',
-            gender='%s'
-            WHERE case_id='%s';
-        """ % (row['stage'], row['primary_site'], row['gender'], row['caseid']))
-    conn.commit()
-    '''
-    cur.close()
-    conn.close()
+
+    local_connector.close_connection()
 
 
 def process_xml():
@@ -106,7 +87,6 @@ def process_xml():
 
     if test:
         start_time = time.time()
-        # filelist = filelist.take(100)
 
     # Extract required fields from xml files
     xml_schema_rdd = filelist_rdd.mapPartitions(extract_field)
@@ -118,16 +98,39 @@ def process_xml():
         print("TOTAL RUNNING TIME: ", (time.time() - start_time))
 
 
+def create_summary_table():
+    """
+    Based on the cancer type information extracted from clinical xml files,
+    generate a summary table describing the cancer type, project id, and sample counts 
+    of the data in patient_info table 
+    """
+    local_connector = LocalConnector(psql)
+    conn, cur = local_connector.get_connection()
+
+    print("Generating project summary table...")
+    cur.execute("""DROP TABLE IF EXISTS project_summary""")
+    cur.execute("""
+        CREATE TABLE project_summary AS
+            SELECT disease_type, project_id, 
+                   COUNT(*) AS sample_counts
+            FROM patient_info
+            GROUP BY disease_type, project_id;
+        """)
+    #cur.execute("""
+    #    DELETE FROM project_summary
+    #    WHERE disease_type IS NULL""")
+    conn.commit()
+    local_connector.close_connection()
+
+
 if __name__ == "__main__":
     # Include spark-xml package and drivers
     if psql:
         print("Using PostgreSQL as database.")
-        environ['PYSPARK_SUBMIT_ARGS'] = '--packages com.databricks:spark-xml_2.10:0.4.1 \
-                            --jars ./jars/postgresql-42.2.2.jar pyspark-shell'
+        environ['PYSPARK_SUBMIT_ARGS'] = '--jars ./jars/postgresql-42.2.2.jar pyspark-shell'
     else:
         print("Using Redshift as database.")
-        environ['PYSPARK_SUBMIT_ARGS'] = '--packages com.databricks:spark-xml_2.10:0.4.1 \
-                            --jars ./jars/spark-redshift_2.11-3.0.0-preview1.jar \
+        environ['PYSPARK_SUBMIT_ARGS'] = '--jars ./jars/spark-redshift_2.11-3.0.0-preview1.jar \
                             --jars ./jars/spark-avro_2.11-4.0.0.jar \
                             --jars ./jars/RedshiftJDBC41-1.2.12.1017.jar \
                             --jars ./jars/minimal-json-0.9.5.jar pyspark-shell'
@@ -146,7 +149,9 @@ if __name__ == "__main__":
 
     # IMPORTANT: to import module in the same python package
     spark.sparkContext.addPyFile('/home/ubuntu/GeneMiner/src/__credential__.py')
+    spark.sparkContext.addPyFile('/home/ubuntu/GeneMiner/src/pipeline/LocalConnector.py')
 
     process_xml()
+    create_summary_table()
 
     spark.stop()
