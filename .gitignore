@@ -10,3 +10,6 @@ src/module/.ipynb_*
 
 bc/*
 playground/*
+
+legacy_flask-app/app/static/*.*
+legacy/*
