@@ -71,18 +71,7 @@ def update_gene_expr_table(files):
                                map(lambda x: (f.caseid, x[0].split('.')[0], float(x[1])), \
                                    filter(lambda x: len(x) > 1, content)))
 
-            '''
             # Method 1
-            # Insert by each row
-            # Even slower
-            from psycopg2 import extras
-            query = """INSERT INTO gene_expr_table 
-                        VALUES (%s, %s, %s)"""
-            psycopg2.extras.execute_batch(cur, query, gene_list)
-            conn.commit()
-            '''
-
-            # Method 2
             # Write the list to temp csv file
             # Which is slow
             header = 'case_id\tgene_id\tgene_expr\n'
@@ -96,6 +85,17 @@ def update_gene_expr_table(files):
                 cur.copy_expert(query, tf)
             conn.commit()
             close(fd)
+
+            '''
+            # Method 2
+            # Insert by each row
+            # Even slower
+            from psycopg2 import extras
+            query = """INSERT INTO gene_expr_table 
+                        VALUES (%s, %s, %s)"""
+            psycopg2.extras.execute_batch(cur, query, gene_list)
+            conn.commit()
+            '''
 
         except:
             print("Unable to retrieve file: gdcdata/datasets/%s" % f.filepath)

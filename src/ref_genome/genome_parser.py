@@ -64,7 +64,8 @@ def create_table():
 
     cur.execute("""
     CREATE TABLE %s(
-        id text PRIMARY KEY,
+        full_id text PRIMARY KEY,
+        id text,
         name text,
         chromosome text,
         strand text,
@@ -97,6 +98,7 @@ def main(param):
             files = unzipper.get_gzip_file_list()
         except AssertionError:
             print("Bucket and Prefix information required for reading data from Amazon S3")
+            return
     else:
         try:
             assert os.path.exists(param)
@@ -105,6 +107,7 @@ def main(param):
             # files = ['Homo_sapiens.GRCh38.92.chromosome.14.dat.gz']  # for small scale test
         except AssertionError:
             print("Valid path to input files required")
+            return
 
     # Process all reference files
     for file in files:
@@ -142,11 +145,11 @@ def main(param):
                     # TODO: One of the 'gene'(ENSG00000276225.1)(possibly) gives error
                     try:
                         # print(gene)
-                        cur.execute("INSERT INTO hs_genome VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                                    (gene.id, gene.name, gene.chromosome, gene.strand,
+                        cur.execute("INSERT INTO hs_genome VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                                    (gene.id, gene.id.split('.')[0], gene.name, gene.chromosome, gene.strand,
                                        gene.position[0], gene.position[1], gene.info))
                         conn.commit()
-                    except IndexError:
+                    except (IndexError, AttributeError):
                         print('ERROR processing gene: %s' % gene.id)
                         # print(gene.id, gene.name, gene.chromosome, gene.position, gene.info)
 
