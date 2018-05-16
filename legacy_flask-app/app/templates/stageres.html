@@ -1,0 +1,41 @@
+{% extends "mybase.html" %}
+{% block stageres %}
+<div class="container">
+     <div class="starter-template">
+       <div class="row" style="height:100vh;">
+               <div class="col-md-10 col-md-offset-1">
+                   <table class="table">
+                     <thead>
+                       <col width="200">
+                       <col width="80">
+                       <col width="80">
+                       <col width="80">
+                       <col width="80">
+                       <col width="200">
+                       <tr>
+                         <th>case_id</th>
+                         <th>project_id</th>
+                         <th>disease_type</th>
+                         <th>disease_stage</th>
+                         <th>gender</th>
+                         <th>gene_expr_table</th>
+                       </tr>
+                     </thead>
+                     <tbody>
+                       {% for val in output %}
+                       <tr>
+                         <td>{{val.case_id}}</td>
+                         <td>{{val.project_id}}</td>
+                         <td>{{val.disease_type}}</td>
+                         <td>{{val.disease_stage}}</td>
+                         <td>{{val.gender}}</td>
+                         <td>{{val.gene_expr_table}}</td>
+                       </tr>
+                       {% endfor %}
+                     </tbody>
+                   </table>
+               </div>
+       </div>
+     </div>
+   </div>
+{% endblock %}
