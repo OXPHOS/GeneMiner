@@ -13,3 +13,6 @@ playground/*
 
 legacy_flask-app/app/static/*.*
 legacy/*
+
+flask-dash-app/.idea/*.*
+flask-dash-app/app/*.pyc
