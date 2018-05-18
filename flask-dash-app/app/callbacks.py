@@ -4,6 +4,9 @@ import plotly.graph_objs as go
 import pandas.io.sql as psql
 from app import conn, varlist
 
+
+fc = psql.read_sql("SELECT * FROM %s_stage2to1" % 'breast', conn)[:10]
+
 def undef():
     return [
         html.Br(),
@@ -98,7 +101,7 @@ def right_top_clinical(cancer):
                 go.Pie(
                     values=df.counts,
                     labels=df.disease_stage,
-                    textfont={'color': '#060606', 'size':'16'})
+                    textfont={'color': '#060606', 'size':'12'})
             ],
             layout = go.Layout(
                 title='Stage Summary',
@@ -122,7 +125,8 @@ def right_top_clinical(cancer):
 
 def right_top_geneexpr(cancer):
     count = 10
-    df = psql.read_sql("SELECT * FROM %s_stage2to1" % cancer, conn)[:10]
+    #df = psql.read_sql("SELECT * FROM %s_stage2to1" % cancer, conn)[:10]
+    df = fc[:10]
     df['annotation'] = df['gene_name'] + '<br />' + df['info'].apply(lambda x: x.split('[')[0])
     return dcc.Graph(
         figure=go.Figure(
@@ -158,7 +162,7 @@ def right_bottom_clinical(cancer):
                 go.Pie(
                     values=df.counts,
                     labels=df.gender,
-                    textfont={'color': '#060606', 'size':'16'})
+                    textfont={'color': '#060606', 'size':'12'})
             ],
             layout = go.Layout(
                 title='Gender Summary',
@@ -181,7 +185,8 @@ def right_bottom_clinical(cancer):
 
 def right_bottom_geneexpr(cancer):
     count = 10
-    df = psql.read_sql("SELECT * FROM %s_stage2to1" % cancer, conn)[-10:]
+    #df = psql.read_sql("SELECT * FROM %s_stage2to1" % cancer, conn)[-10:]
+    df = fc[-10:].copy()
     df = df[::-1]
     df['annotation'] = df['gene_name'] + '<br />' + df['info'].apply(lambda x: x.split('[')[0])
     return dcc.Graph(

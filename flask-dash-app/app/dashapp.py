@@ -53,22 +53,23 @@ dashapp.layout = html.Div(children=[
 
     # Analysis Board
     html.Hr(),
+    html.Div([]),
     html.Div(id='left',
              style={'width': '53%', 'fontFamily': 'Sans-Serif',
                     'position': 'absolute',
-                    'bottom': '20px', 'left': '0px',
+                    'bottom': '-80px', 'left': '0px',
                     }
              ),
     html.Div(id='right-top',
              style={'width': '46%', #'height': '48%',
                     'float': 'right', 'position': 'absolute',
-                    'bottom': '280px', 'right': '0px',
+                    'bottom': '180px', 'right': '0px',
                     'fontFamily': 'Sans-Serif',}
              ),
     html.Div(id='right-bottom',
              style={'width': '46%', #'height': '48%',
                     'float': 'right', 'position': 'absolute',
-                    'bottom': '20px', 'right': '0px',
+                    'bottom': '-80px', 'right': '0px',
                     'fontFamily': 'Sans-Serif',}
              ),
 ])
