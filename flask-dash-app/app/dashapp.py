@@ -43,6 +43,17 @@ dashapp.layout = html.Div(children=[
 
     html.Br(),
     html.Br(),
+
+    # Links
+    html.A(
+        html.Button('Source code', className='ppt'),
+        href='https://github.com/OXPHOS/GeneMiner',
+        style={'float': 'right', 'display': 'inline-block', 'fontFamily': 'Sans-Serif'}),
+    html.A(
+        html.Button('Slides', className='src'),
+        href='https://docs.google.com/presentation/d/1Ljrg5V1j2WjQwgLIoPzg4ZIMMs7aOcseHKa0dsIqt-s/edit?usp=sharing',
+        style={'float': 'right', 'display': 'inline-block', 'fontFamily': 'Sans-Serif'}),
+
     # Analysis selection
     html.Div([
         dcc.RadioItems(
@@ -55,21 +66,21 @@ dashapp.layout = html.Div(children=[
     html.Hr(),
     html.Div([]),
     html.Div(id='left',
-             style={'width': '53%', 'fontFamily': 'Sans-Serif',
+             style={'width': '51%', 'fontFamily': 'Sans-Serif',
                     'position': 'absolute',
-                    'bottom': '-80px', 'left': '0px',
+                    'bottom': '-20px', 'left': '10px',
                     }
              ),
     html.Div(id='right-top',
              style={'width': '46%', #'height': '48%',
                     'float': 'right', 'position': 'absolute',
-                    'bottom': '180px', 'right': '0px',
+                    'bottom': '240px', 'right': '10px',
                     'fontFamily': 'Sans-Serif',}
              ),
     html.Div(id='right-bottom',
              style={'width': '46%', #'height': '48%',
                     'float': 'right', 'position': 'absolute',
-                    'bottom': '-80px', 'right': '0px',
+                    'bottom': '-20px', 'right': '10px',
                     'fontFamily': 'Sans-Serif',}
              ),
 ])
@@ -79,6 +90,8 @@ dashapp.layout = html.Div(children=[
     Output('analysis_radioitems', 'options'),
     [Input('cancertype_dropdown', 'value')])
 def update_analysis_tabs(cancertype):
+    if cancertype:
+        callbacks.readdata(cancertype)
     return varlist.dropdownDict[cancertype]
 
 

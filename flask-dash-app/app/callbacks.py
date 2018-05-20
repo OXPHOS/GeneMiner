@@ -4,8 +4,14 @@ import plotly.graph_objs as go
 import pandas.io.sql as psql
 from app import conn, varlist
 
-
-fc = psql.read_sql("SELECT * FROM %s_stage2to1" % 'breast', conn)[:10]
+top10 = None
+bottom10 = None
+def readdata(cancer):
+    fc = psql.read_sql("SELECT * FROM %s_stage2to1" % cancer, conn)
+    global top10;
+    top10 = fc[:10].copy(deep=True)
+    global bottom10;
+    bottom10 =fc[-10:].copy(deep=True)[::-1]
 
 def undef():
     return [
@@ -126,15 +132,14 @@ def right_top_clinical(cancer):
 def right_top_geneexpr(cancer):
     count = 10
     #df = psql.read_sql("SELECT * FROM %s_stage2to1" % cancer, conn)[:10]
-    df = fc[:10]
-    df['annotation'] = df['gene_name'] + '<br />' + df['info'].apply(lambda x: x.split('[')[0])
+    top10['annotation'] = top10['gene_name'] + '<br />' + top10['info'].apply(lambda x: x.split('[')[0])
     return dcc.Graph(
         figure=go.Figure(
             data=[
                 go.Bar(
                     x=list(range(1, count+1)),
-                    y=df.fold_change,
-                    text=df.annotation,
+                    y=top10.fold_change,
+                    text=top10.annotation,
                     textfont={'size':'16'})
                 ],
             layout=go.Layout(
@@ -186,16 +191,14 @@ def right_bottom_clinical(cancer):
 def right_bottom_geneexpr(cancer):
     count = 10
     #df = psql.read_sql("SELECT * FROM %s_stage2to1" % cancer, conn)[-10:]
-    df = fc[-10:].copy()
-    df = df[::-1]
-    df['annotation'] = df['gene_name'] + '<br />' + df['info'].apply(lambda x: x.split('[')[0])
+    bottom10['annotation'] = bottom10['gene_name'] + '<br />' + bottom10['info'].apply(lambda x: x.split('[')[0])
     return dcc.Graph(
         figure=go.Figure(
             data=[
                 go.Bar(
                     x=list(range(1, count+1)),
-                    y=df.fold_change,
-                    text=df.annotation,
+                    y=bottom10.fold_change,
+                    text=bottom10.annotation,
                     textfont={'size':'16'})
                 ],
             layout=go.Layout(

@@ -9,7 +9,7 @@ fgeneexpr = {'label': 'Gene expression analysis', 'value': 'geneexpr'}
 fsnp = {'label': 'SNP analysis', 'value': 'snp'}
 fnull = {'label': '', 'value': ''}
 
-#
+# Cancer types
 cancertypeList = [
     {'label': '', 'value': ''},
     {'label': 'Breast cancer', 'value': 'Breast'},
@@ -21,6 +21,6 @@ cancertypeList = [
 dropdownDict = {
     '':[],
     'Breast': [fclinical, fgeneexpr, fsnp],
-    'Brain': [fclinical, fsnp],
+    'Brain': [fclinical, fgeneexpr, fsnp],
     'Lung': [fclinical, fsnp]
 }
