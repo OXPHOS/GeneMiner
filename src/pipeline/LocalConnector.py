@@ -1,3 +1,13 @@
+# !/usr/bin/env python3.6
+# -*- coding:utf-8 -*-
+
+"""
+Setup connector to PostgreSQL or Redshift with psycopg2
+
+Author: Pan Deng
+
+"""
+
 import psycopg2
 import __credential__
 

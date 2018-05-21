@@ -2,7 +2,7 @@
 # -*- coding:utf-8 -*-
 
 """
-Extract pre-stored file information
+Load from and save files to PostgreSQL or Redshift with jdbc drivers
 
 Author: Pan Deng
 
