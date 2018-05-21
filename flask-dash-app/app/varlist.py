@@ -1,3 +1,13 @@
+# !/usr/bin/env python3.6
+# -*- coding:utf-8 -*-
+
+"""
+Values used for front end
+
+Author: Pan Deng
+
+"""
+
 colors = {
     'background': '#111111',
     'text': '#F6F6FA'

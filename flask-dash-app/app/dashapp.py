@@ -1,4 +1,13 @@
-# -*- coding: utf-8 -*-
+# !/usr/bin/env python3.6
+# -*- coding:utf-8 -*-
+
+"""
+html page framework with plotly/dash and flask
+
+Author: Pan Deng
+
+"""
+
 import dash
 import dash_core_components as dcc
 import dash_html_components as html
@@ -31,7 +40,7 @@ dashapp.layout = html.Div(children=[
                 'fontFamily': 'Sans-Serif'}
             ),
 
-    # Cancer type selection
+    # Cancer type dropdown menu
     html.Div([
         html.Label('Choose a type of cancer:'),
         dcc.Dropdown(

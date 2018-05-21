@@ -1,19 +1,39 @@
+# !/usr/bin/env python3.6
+# -*- coding:utf-8 -*-
+
+"""
+Interactive graph implementation
+
+Author: Pan Deng
+
+"""
+
 import dash_core_components as dcc
 import dash_html_components as html
 import plotly.graph_objs as go
 import pandas.io.sql as psql
 from app import conn, varlist
 
+
 top10 = None
 bottom10 = None
 def readdata(cancer):
+    """
+    Pre-load dataset from database to avoid concurrent reading from one table
+    
+    :param cancer: type of cancer queried
+    """
     fc = psql.read_sql("SELECT * FROM %s_stage2to1" % cancer, conn)
     global top10;
     top10 = fc[:10].copy(deep=True)
     global bottom10;
     bottom10 =fc[-10:].copy(deep=True)[::-1]
 
+
 def undef():
+    """
+    For undefined behaviors
+    """
     return [
         html.Br(),
         html.Br(),
@@ -26,7 +46,11 @@ def undef():
             }
         )]
 
+
 def left_clinical(cancer):
+    """
+    Display patient_info table of queried cancer 
+    """
     df = psql.read_sql("SELECT * FROM patient_info WHERE disease_type = '%s' " % cancer, conn)
     return dcc.Graph(
          figure=go.Figure(
@@ -60,6 +84,9 @@ def left_clinical(cancer):
 
 
 def left_geneexpr(cancer):
+    """
+    Display gene expression comparison of given cancer type and queried stages as 2D scatter plot. 
+    """
     df = psql.read_sql("SELECT * FROM %s_stage2and1" % cancer, conn)
     # df['annotation'] = df['gene_name'] + '(<br />' + df['info'].apply(lambda x: x.split('[')[0]) + ')'
     return dcc.Graph(
@@ -99,6 +126,9 @@ def left_geneexpr(cancer):
 
 
 def right_top_clinical(cancer):
+    """
+    Stage summary in pie chart. 
+    """
     df = psql.read_sql("SELECT COUNT(*) AS counts, disease_stage FROM patient_info "
                        "WHERE disease_type = '%s' GROUP BY disease_stage " % cancer, conn)
     return dcc.Graph(
@@ -130,8 +160,11 @@ def right_top_clinical(cancer):
 
 
 def right_top_geneexpr(cancer):
+    """
+    Top 10 genes changed - bar chart. 
+    """
     count = 10
-    #df = psql.read_sql("SELECT * FROM %s_stage2to1" % cancer, conn)[:10]
+    # df = psql.read_sql("SELECT * FROM %s_stage2to1" % cancer, conn)[:10]
     top10['annotation'] = top10['gene_name'] + '<br />' + top10['info'].apply(lambda x: x.split('[')[0])
     return dcc.Graph(
         figure=go.Figure(
@@ -159,6 +192,9 @@ def right_top_geneexpr(cancer):
 
 
 def right_bottom_clinical(cancer):
+    """
+    Stage summary in pie chart. 
+    """
     df = psql.read_sql("SELECT COUNT(*) AS counts, gender FROM patient_info "
                        "WHERE disease_type = '%s' GROUP BY gender " % cancer, conn)
     return dcc.Graph(
@@ -188,9 +224,13 @@ def right_bottom_clinical(cancer):
             id = 'gender_pie',
         )
 
+
 def right_bottom_geneexpr(cancer):
+    """
+    Bottom 10 genes changed - bar chart. 
+    """
     count = 10
-    #df = psql.read_sql("SELECT * FROM %s_stage2to1" % cancer, conn)[-10:]
+    # df = psql.read_sql("SELECT * FROM %s_stage2to1" % cancer, conn)[-10:]
     bottom10['annotation'] = bottom10['gene_name'] + '<br />' + bottom10['info'].apply(lambda x: x.split('[')[0])
     return dcc.Graph(
         figure=go.Figure(
