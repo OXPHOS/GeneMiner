@@ -8,10 +8,10 @@
 - [Overview](#overview)
 - [Pipeline](#pipeline)
     - [File look-up table](#file-look-up-table)
-    - [Xml file processors](#xml-file-processors)
-    - [Txt file processors](#txt-file-processors)
+    - [Xml files processor](#xml-files-processor)
+    - [Txt files processor](#txt-files-processor)
 - [Downstream analysis example](#downstream-analysis-example)
-- [Configuration](#Configuration)
+- [Configuration](#configuration)
 - [Dependencies](#dependencies)
 - [Run instructions](#run-instructions)
 - [Demo](#demo)
@@ -129,6 +129,7 @@ Information of genes from in total 24 chromosomes plus mitochondrial and non-chr
     | text    | text | text | text       | text   | integer   | integer | text |
 
 
+
 After sorting by `fold_change`, the `top10` table came with schema:
  
 | gene_id | gene_name | fold_change | chromosome | info |
@@ -225,7 +226,7 @@ Tha packages above should be available on both mater and workers.
 The demo is built by `plotly/dash` and made publically available via 'flask', 'gunicorn' and 'nginx. 
 For more information about setting up the front end, refer to [wikipage](https://github.com/OXPHOS/GeneMiner/wiki/Setup-front-end-with-plotly-dash,-flask,-gunicorn-and-nginx).
 
-When applicable, the demo is run at site: [oxphos.online](oxphos.online).
+When applicable, the demo is running at site: [http://www.oxphos.online](oxphos.online).
 
 First, the website allows table display and summary view of patient clinical reports of different types and cancer (clinical reports):
 
