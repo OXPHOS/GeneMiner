@@ -1,4 +1,4 @@
-# Gene Miner - an integrated cancer data hub
+# Gene Miner - an integrated platform for cancer data analysis
 
 2018 Insight Data Engineering project
 
@@ -7,7 +7,7 @@
 
 - [Overview](#overview)
 - [Pipeline](#pipeline)
-    - [File look-up table](#file-look-up-table)
+    - [File lookup table](#file-lookup-table)
     - [Xml files processor](#xml-files-processor)
     - [Txt files processor](#txt-files-processor)
 - [Downstream analysis example](#downstream-analysis-example)
@@ -32,7 +32,7 @@ The pipeline can be divided into 2 stages:
 - Generation of file look-up table 
 - Individual file parsing and information extraction. 
 
-#### [File look-up table](https://github.com/OXPHOS/GeneMiner/blob/master/src/pipeline/metainfo_processor.py)
+#### [File lookup table](https://github.com/OXPHOS/GeneMiner/blob/master/src/pipeline/metainfo_processor.py)
 
 In data portal of National Cancer Institute, each patient may have multiple feature files, and each feature file 
 contains one aspect of information from one individual patient. Moreover, it isn't possible to tell which patient one file
@@ -223,7 +223,7 @@ Tha packages above should be available on both mater and workers.
 
 ### Demo
 
-The demo is built by `plotly/dash` and made publically available via 'flask', 'gunicorn' and 'nginx. 
+The demo is built by `plotly/dash` and made publicly available via `flask`, `gunicorn` and `nginx`. 
 For more information about setting up the front end, refer to [wikipage](https://github.com/OXPHOS/GeneMiner/wiki/Setup-front-end-with-plotly-dash,-flask,-gunicorn-and-nginx).
 
 When applicable, the demo is running at site: [http://www.oxphos.online](oxphos.online).

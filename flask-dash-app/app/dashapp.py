@@ -34,7 +34,7 @@ dashapp.layout = html.Div(children=[
                 'textAlign': 'center',
                 'fontFamily': 'Sans-Serif'}
             ),
-    html.H3(children="An integrated cancer data hub",
+    html.H3(children="An integrated platform for cancer data analysis",
             style={
                 'textAlign': 'center',
                 'fontFamily': 'Sans-Serif'}
