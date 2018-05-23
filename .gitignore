@@ -11,8 +11,8 @@ src/module/.ipynb_*
 bc/*
 playground/*
 
-legacy_flask-app/app/static/*.*
-legacy/*
+legacy/legacy_flask-app/app/static/*.*
+legacy/*.py
 
 flask-dash-app/.idea/*.*
 flask-dash-app/app/*.pyc
