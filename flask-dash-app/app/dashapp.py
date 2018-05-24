@@ -75,21 +75,21 @@ dashapp.layout = html.Div(children=[
     html.Hr(),
     html.Div([]),
     html.Div(id='left',
-             style={'width': '51%', 'fontFamily': 'Sans-Serif',
+             style={'width': '55%', 'fontFamily': 'Sans-Serif',
                     'position': 'absolute',
-                    'bottom': '-20px', 'left': '10px',
+                    'top': '235px', 'left': '10px',
                     }
              ),
     html.Div(id='right-top',
-             style={'width': '46%', #'height': '48%',
+             style={'width': '41%', #'height': '48%',
                     'float': 'right', 'position': 'absolute',
-                    'bottom': '240px', 'right': '10px',
+                    'top': '235px', 'right': '10px',
                     'fontFamily': 'Sans-Serif',}
              ),
     html.Div(id='right-bottom',
-             style={'width': '46%', #'height': '48%',
+             style={'width': '41%', #'height': '48%',
                     'float': 'right', 'position': 'absolute',
-                    'bottom': '-20px', 'right': '10px',
+                    'top': '505px', 'right': '10px',
                     'fontFamily': 'Sans-Serif',}
              ),
 ])
