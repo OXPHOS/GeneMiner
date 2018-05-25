@@ -40,11 +40,17 @@ def extract_field(files):
                               aws_secret_access_key=__credential__.aws_secret_access_key)
     for f in files:
         # Stream-in files from S3
-        obj = resource.Object('gdcdata', 'datasets/%s' % f.filepath)
+        obj = resource.Object('gdcdata', f.filepath)
         body = obj.get()['Body'].read()
+        info = {x:'' for x in xml_ref.keys()}
 
-        # Extract information: stage, primary site and gender associated with patient id,
-        info = dict(map(lambda x: (x[0], ET.fromstring(body).find(x[1]).text), xml_ref.items()))
+        # Extract stage, primary site and gender
+        for (key, val) in xml_ref.items():
+            field = ET.fromstring(body).find(val)
+            if field is not None:
+                info[key] = field.text
+            else:
+                info[key] = 'N/A'
         info.update({"caseid": f.caseid})
 
         yield info
@@ -89,7 +95,7 @@ def process_xml():
         start_time = time.time()
 
     # Extract required fields from xml files
-    xml_schema_rdd = filelist_rdd.mapPartitions(extract_field)
+    xml_schema_rdd = filelist_rdd.repartition(18).mapPartitions(extract_field)
 
     # Update the database
     xml_schema_rdd.foreachPartition(update_patient_info)

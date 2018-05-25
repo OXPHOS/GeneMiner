@@ -17,7 +17,6 @@ from LocalConnector import LocalConnector
 import database_connector
 import __credential__
 from io import BytesIO
-import psycopg2
 from tempfile import mkstemp
 from gzip import GzipFile
 import csv
@@ -25,7 +24,7 @@ import boto3
 import time
 
 psql=True
-test=True
+test=False
 
 
 def create_gene_expr_table():
@@ -59,7 +58,7 @@ def update_gene_expr_table(files):
     for f in files:
         try:  # TODO: import Error
             # Stream-in files from S3 and parse to list
-            obj = s3.get_object(Bucket='gdcdata', Key='datasets/%s' % f.filepath)
+            obj = s3.get_object(Bucket='gdcdata', Key=f.filepath)
             body = obj['Body'].read()
             content = GzipFile(None, 'r', fileobj=BytesIO(body)).read().decode('utf-8')
             content = list(csv.reader(content.split('\n'), delimiter='\t'))
@@ -78,8 +77,8 @@ def update_gene_expr_table(files):
             fd, path = mkstemp(suffix='.csv')
             with open(path, 'w', newline='') as tf:
                 tf.write(header)
-                spamwriter = csv.writer(tf, delimiter='\t')
-                spamwriter.writerows(gene_list)
+                writer = csv.writer(tf, delimiter='\t')
+                writer.writerows(gene_list)
             query = "COPY gene_expr_table FROM STDIN DELIMITER '\t' CSV HEADER"
             with open(path, 'r') as tf:
                 cur.copy_expert(query, tf)
@@ -90,15 +89,16 @@ def update_gene_expr_table(files):
             # Method 2
             # Insert by each row
             # Even slower
+            import psycopg2
             from psycopg2 import extras
-            query = """INSERT INTO gene_expr_table 
+            query = """INSERT INTO gene_expr_table
                         VALUES (%s, %s, %s)"""
             psycopg2.extras.execute_batch(cur, query, gene_list)
             conn.commit()
             '''
 
         except:
-            print("Unable to retrieve file: gdcdata/datasets/%s" % f.filepath)
+            print("Unable to retrieve file: gdcdata/%s" % f.filepath)
             continue
 
     local_connector.close_connection()
@@ -118,18 +118,10 @@ def process_rnaseq(spark):
     else:
         filelist_rdd = database_connector.redshift_file_loader(spark, tbname="txt_list", tmpdir="txt_files")
 
-    filelist_rdd.repartition(8).filter(lambda x: '-UQ.txt' in x.filepath).foreachPartition(update_gene_expr_table)
-
-    # Index the table
-    local_connector = LocalConnector(psql)
-    conn, cur = local_connector.get_connection()
-
-    cur.execute("""CREATE INDEX cid ON gene_expr_table(case_id)""")
-    cur.execute("""CREATE INDEX gid ON gene_expr_table(gene_id)""")
-    conn.commit()
-
-    local_connector.close_connection()
-
+    filelist_rdd\
+        .filter(lambda x: '-UQ.txt' in x.filepath)\
+        .repartition(18)\
+        .foreachPartition(update_gene_expr_table)
 
 if __name__ == "__main__":
     # Setup Driver for connection
@@ -174,3 +166,15 @@ if __name__ == "__main__":
         process_rnaseq(spark)
 
     spark.stop()
+
+    # Index the table
+    # Better to be done in sql
+    print("Indexing gene expression table...")
+    local_connector = LocalConnector(psql)
+    conn, cur = local_connector.get_connection()
+
+    cur.execute("""CREATE INDEX cid ON gene_expr_table(case_id)""")
+    cur.execute("""CREATE INDEX gid ON gene_expr_table(gene_id)""")
+    conn.commit()
+
+    local_connector.close_connection()

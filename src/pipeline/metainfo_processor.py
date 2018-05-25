@@ -12,7 +12,7 @@ Author: Pan Deng
 
 from pyspark.sql import SparkSession
 from os import environ
-import psycopg2
+from LocalConnector import LocalConnector
 import __credential__
 import database_connector
 
@@ -24,15 +24,12 @@ def create_table():
     """
     Create a new PostgreSQL or Redshift table to record patient information
     The table columns can be altered via SQL commands after creation
+    
     """
-    if psql:
-        conn = psycopg2.connect(host=__credential__.host_psql, dbname=__credential__.dbname_psql,
-                                user=__credential__.user_psql, password=__credential__.password_psql)
-    else:
-        conn = psycopg2.connect(host=__credential__.host_redshift, dbname=__credential__.dbname_redshift,
-                                user=__credential__.user_redshift, password=__credential__.password_redshift,
-                                port=__credential__.port_redshift)
-    cur = conn.cursor()
+    # Connect to database
+    local_connector = LocalConnector(psql)
+    conn, cur = local_connector.get_connection()
+
     cur.execute("""
             DROP TABLE IF EXISTS patient_info""")
     conn.commit()
@@ -48,15 +45,19 @@ def create_table():
     )
     """)
     # case_id is patient id
-    # TODO: Figure out how to make the unique unique
     conn.commit()
+    local_connector.close_connection()
 
 
 def main():
     create_table()
 
     # Read meta data file, with information about patient ID, project info and filename
-    meta = spark.read.json('s3a://gdcdata/refs/files.c+r.json', multiLine=True)
+    meta = spark.read.json('s3a://gdcdata/refs/files.c+r.all.json', multiLine=True)
+    meta = meta.filter(meta.data_format != 'XLSX')
+    # projects with 'xlsx' format files are serialized in different ways,
+    # resulting in all patient info concatenated, and thus cause the row extremely long,
+    # And makes indexing impossible in psql. TODO: processor for 'xlsx' files
     meta.createOrReplaceTempView("meta_view")
 
     # Read manifest data file, with information about the directory the files are in
@@ -64,7 +65,7 @@ def main():
         .option("delimiter", "\t").option("quote", "") \
         .option("header", "true") \
         .option("inferSchema", "true") \
-        .load('s3a://gdcdata/refs/gdc_manifest.c+r.txt')
+        .load('s3a://gdcdata/refs/gdc_manifest.c+r.all.txt')
     manifest = manifest.selectExpr('id as path', 'filename as filename')
     manifest.createOrReplaceTempView("manifest_view")
 
@@ -80,7 +81,7 @@ def main():
     # Add non-duplicated patient information to patient_info table
     index.createOrReplaceTempView("index_view")
     if psql:
-        spark.sql('''SELECT DISTINCT case_id, project_id FROM index_view''') \
+        spark.sql('''SELECT DISTINCT case_id, project_id FROM index_view''')\
             .write.format("jdbc") \
             .option("url", 'jdbc:postgresql://%s' % __credential__.jdbc_accessible_host_psql) \
             .option("dbtable", "patient_info") \
@@ -97,7 +98,6 @@ def main():
             .option("tempdir", "s3n://gdcdata/tmp_create_table") \
             .mode("append") \
             .save()
-
 
     # Split files and save to PostgreSQL
     # Group files by column: data_format
@@ -124,9 +124,6 @@ def main():
             print("Saving data in unknown foramt to Redshift table: unknowns.")
             database_connector.redshift_saver(spark, df=unreadable.toDF(), tbname='unknowns', \
                                               tmpdir='tmp_unknown', savemode='overwrite')
-
-    # cursor.close()
-    # conn.close()
 
 
 if __name__ == "__main__":
