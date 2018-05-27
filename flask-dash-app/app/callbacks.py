@@ -15,19 +15,20 @@ import pandas.io.sql as psql
 from app import conn, varlist
 
 
-top10 = None
-bottom10 = None
+count = 10
+top = None
+bottom = None
 def readdata(cancer):
     """
     Pre-load dataset from database to avoid concurrent reading from one table
     
     :param cancer: type of cancer queried
     """
-    fc = psql.read_sql("SELECT * FROM %s_stage2to1" % cancer, conn)
-    global top10;
-    top10 = fc[:10].copy(deep=True)
-    global bottom10;
-    bottom10 =fc[-10:].copy(deep=True)[::-1]
+    fc = psql.read_sql("SELECT * FROM exprsort_%s" % cancer.replace(' ', ''), conn)
+    global top;
+    top = fc[:count].copy(deep=True)
+    global bottom;
+    bottom = fc[-count:].copy(deep=True)[::-1]
 
 
 def undef():
@@ -87,13 +88,14 @@ def left_geneexpr(cancer):
     """
     Display gene expression comparison of given cancer type and queried stages as 2D scatter plot. 
     """
-    df = psql.read_sql("SELECT * FROM %s_stage2and1" % cancer, conn)
-    # df['annotation'] = df['gene_name'] + '(<br />' + df['info'].apply(lambda x: x.split('[')[0]) + ')'
+    df = psql.read_sql("SELECT * FROM exprcmp_%s" % cancer.replace(' ', ''), conn)
+    if not varlist.stages[cancer]:
+        return ''
     return dcc.Graph(
         figure=go.Figure(
             data=[go.Scatter(
-                x=df.stage1_avg_expr,
-                y=df.stage2_avg_expr,
+                x=df.early_avg_expr,
+                y=df.late_avg_expr,
                 text=df.gene_name,
                 # textfont={'size': '18'},
                 mode='markers',
@@ -103,14 +105,14 @@ def left_geneexpr(cancer):
                     'line': {'width': 0.5, 'color': 'white'}}
                 )],
             layout = go.Layout(
-                title='Gene Expr: Stage II vs Stage I',
+                title='Gene Expr: %s vs %s' % (varlist.stages[cancer][1], varlist.stages[cancer][0]),
                 titlefont={'size': '18'},
                 xaxis={
-                    'title': 'Stage I gene expr value (log)',
+                    'title': '%s gene expr value (log)' % varlist.stages[cancer][1],
                     'type': 'log' # 'linear'
                 },
                 yaxis={
-                    'title': 'Stage II gene expr value (log)',
+                    'title': '%s gene expr value (log)' % varlist.stages[cancer][0],
                     'type': 'log'
                 },
                 margin={'l': 70, 'b': 80, 't': 80, 'r': 20},
@@ -163,20 +165,25 @@ def right_top_geneexpr(cancer):
     """
     Top 10 genes changed - bar chart. 
     """
-    count = 10
-    # df = psql.read_sql("SELECT * FROM %s_stage2to1" % cancer, conn)[:10]
-    top10['annotation'] = top10['gene_name'] + '<br />' + top10['info'].apply(lambda x: x.split('[')[0])
+    if not varlist.stages[cancer]:
+        return ''
+
+    try:
+        top['annotation'] = top['gene_name'] + '<br />' + top['info'].apply(lambda x: x.split('[')[0])
+    except AttributeError:
+        top['annotation'] = top['gene_name'] + '<br />' + top['info']
     return dcc.Graph(
         figure=go.Figure(
             data=[
                 go.Bar(
                     x=list(range(1, count+1)),
-                    y=top10.fold_change,
-                    text=top10.annotation,
+                    y=top.fold_change,
+                    text=top.annotation,
                     textfont={'size':'16'})
                 ],
             layout=go.Layout(
-                title='Top %s genes INCREASED: Stage II vs stage I' % count,
+                title='Top %s genes INCREASED: %s vs stage %s'
+                      % (count, varlist.stages[cancer][1], varlist.stages[cancer][0]),
                 titlefont={'size':'16'},
                 height=250,
                 # width=450,
@@ -229,20 +236,25 @@ def right_bottom_geneexpr(cancer):
     """
     Bottom 10 genes changed - bar chart. 
     """
-    count = 10
-    # df = psql.read_sql("SELECT * FROM %s_stage2to1" % cancer, conn)[-10:]
-    bottom10['annotation'] = bottom10['gene_name'] + '<br />' + bottom10['info'].apply(lambda x: x.split('[')[0])
+    if not varlist.stages[cancer]:
+        return ''
+
+    try:
+        bottom['annotation'] = bottom['gene_name'] + '<br />' + bottom['info'].apply(lambda x: x.split('[')[0])
+    except AttributeError:
+        bottom['annotation'] = bottom['gene_name'] + '<br />' + bottom['info']
     return dcc.Graph(
         figure=go.Figure(
             data=[
                 go.Bar(
                     x=list(range(1, count+1)),
-                    y=bottom10.fold_change,
-                    text=bottom10.annotation,
+                    y=bottom.fold_change,
+                    text=bottom.annotation,
                     textfont={'size':'16'})
                 ],
             layout=go.Layout(
-                title='Top %s genes DECREASED: Stage II vs stage I' % count,
+                title='Top %s genes DECREASED: %s vs %s'
+                      % (count, varlist.stages[cancer][1], varlist.stages[cancer][0]),
                 titlefont={'size':'16'},
                 height=250,
                 # width=450,

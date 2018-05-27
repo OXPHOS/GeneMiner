@@ -94,14 +94,16 @@ dashapp.layout = html.Div(children=[
              ),
 ])
 
+
 # Refine analysis tab menu from cancer type
 @dashapp.callback(
     Output('analysis_radioitems', 'options'),
     [Input('cancertype_dropdown', 'value')])
 def update_analysis_tabs(cancertype):
-    if cancertype:
+    anlys = varlist.dropdownDict[cancertype]
+    if varlist.fgeneexpr in anlys:
         callbacks.readdata(cancertype)
-    return varlist.dropdownDict[cancertype]
+    return anlys
 
 
 # Run analysis
@@ -112,7 +114,8 @@ def update_analysis_tabs(cancertype):
 def plot_analysis_2(cancertype, analysistype):
     if analysistype=='clinical':
         return callbacks.right_top_clinical(cancertype)
-    elif analysistype=='geneexpr':
+    elif analysistype=='geneexpr' and \
+            varlist.fgeneexpr in varlist.dropdownDict[cancertype]:
         return callbacks.right_top_geneexpr(cancertype)
     else:
         return ''
@@ -124,7 +127,8 @@ def plot_analysis_2(cancertype, analysistype):
 def plot_analysis(cancertype, analysistype):
     if analysistype=='clinical':
         return callbacks.right_bottom_clinical(cancertype)
-    elif analysistype=='geneexpr':
+    elif analysistype == 'geneexpr' and \
+                    varlist.fgeneexpr in varlist.dropdownDict[cancertype]:
         return callbacks.right_bottom_geneexpr(cancertype)
     else:
         return ''
@@ -136,9 +140,8 @@ def plot_analysis(cancertype, analysistype):
 def plot_analysis(cancertype, analysistype):
     if analysistype=='clinical':
         return callbacks.left_clinical(cancertype)
-    elif analysistype=='geneexpr':
+    elif analysistype=='geneexpr' and \
+                    varlist.fgeneexpr in varlist.dropdownDict[cancertype]:
         return callbacks.left_geneexpr(cancertype)
-    elif analysistype == '' or analysistype == None:
-        return ''
     else:
-        return callbacks.undef()
+        return ''
