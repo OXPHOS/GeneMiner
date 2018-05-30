@@ -182,7 +182,7 @@ def right_top_geneexpr(cancer):
                     textfont={'size':'16'})
                 ],
             layout=go.Layout(
-                title='Top %s genes INCREASED: %s vs stage %s'
+                title='Top %s genes INCREASED: %s vs %s'
                       % (count, varlist.stages[cancer][1], varlist.stages[cancer][0]),
                 titlefont={'size':'16'},
                 height=250,
